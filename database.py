@@ -15,7 +15,8 @@ class DataBaseOps:
                        user_id INTEGER PRIMARY KEY AUTOINCREMENT,
                        name TEXT,
                        level TEXT,
-                       join_time DATETIME)        
+                       join_time DATETIME,
+                       is_expert BOOLEAN DEFAULT FALSE)        
         ''')
 
         cursor.execute('''
@@ -25,11 +26,23 @@ class DataBaseOps:
                        q_level TEXT)
         ''')
 
+        # cursor.execute('''
+        # CREATE TABLE IF NOT EXISTS pros (
+        #                pro_id INTEGER PRIMARY KEY,
+        #                name TEXT,
+        #                num_evals INTEGER)
+        # ''')
+
         cursor.execute('''
-        CREATE TABLE IF NOT EXISTS pros (
-                       pro_id INTEGER PRIMARY KEY,
-                       name TEXT,
-                       num_evals INTEGER)
+            CREATE TABLE IF NOT EXISTS assesments (
+                answer_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                question TEXT,
+                user_answer TEXT,
+                is_correct BOOLEAN,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
         ''')
 
         self.db.commit()
@@ -47,9 +60,20 @@ class DataBaseOps:
     def insert_user(self, name='no_name', level='beginner'):
         cursor = self.db.cursor()
 
+        is_expert = level.lower() == 'advanced'
         cursor.execute('''
-        INSERT INTO users (name, level, join_time) VALUES (?, ?, ?)
-        ''', (name, level, datetime.now()))
+        INSERT INTO users (name, level, join_time, is_expert)
+        VALUES (?, ?, ?, ?)
+        ''', (name, level, datetime.now(), is_expert))
+
+        self.db.commit()
+
+    def insert_assesment(self, user_id, q, ans, is_correct, time):
+        cursor = self.db.cursor()
+        cursor.execute('''
+            INSERT INTO assesments (user_id, question, user_answer, is_correct, timestamp)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user_id, q, ans, is_correct, time))
 
         self.db.commit()
 
