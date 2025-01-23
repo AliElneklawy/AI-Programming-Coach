@@ -14,16 +14,18 @@ from constants import (
 load_dotenv()
 
 if __name__ == '__main__':
-    COHERE_API = os.getenv('COHERE_API')
     user_id = 1
 
     db = DataBaseOps()
-    bot = PythonLearningBot(COHERE_API)
+    bot = PythonLearningBot()
 
-    db.insert_q(beginner_questions)
-    db.insert_q(intermediate_questions)
-    db.insert_q(advanced_questions)
+    # db.insert_q(beginner_questions)
+    # db.insert_q(intermediate_questions)
+    # db.insert_q(advanced_questions)
 
-    user_level = bot.initial_assesment(initial_asses_qs, user_id)
-    db.insert_user(level=user_level)
+    # user_level = bot.initial_assesment(initial_asses_qs, user_id)
+    # db.insert_user(level=user_level)
+    q = db.get_questions('advanced')
+    for qe in q:
+        print(qe[0])
 

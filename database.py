@@ -77,4 +77,28 @@ class DataBaseOps:
 
         self.db.commit()
 
+    def get_questions(self, q_level: str):
+        cursor = self.db.cursor()
+        cursor.execute('''
+        SELECT question FROM questions WHERE q_level == ?
+        ''', (q_level,))
+        questions = cursor.fetchall()
 
+        return questions
+    
+    def get_users(self, id=None):
+        cursor = self.db.cursor()
+
+        if not id:
+            cursor.execute('''
+            SELECT * FROM users
+            ''')
+            users = cursor.fetchall()
+            return users
+        
+        cursor.execute('''
+        SELECT user_id FROM users WHERE user_id == ?
+        ''', (id,))
+
+        user = cursor.fetchone()
+        return user
