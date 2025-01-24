@@ -12,7 +12,8 @@ class DataBaseOps:
 
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
-                       user_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                       user_id INTEGER PRIMARY KEY,
+                       score INTEGER,
                        name TEXT,
                        level TEXT,
                        join_time DATETIME,
@@ -57,14 +58,14 @@ class DataBaseOps:
         
         self.db.commit()
 
-    def insert_user(self, name='no_name', level='beginner'):
+    def insert_user(self, user_id, score, name='no_name', level='beginner'):
         cursor = self.db.cursor()
 
         is_expert = level.lower() == 'advanced'
         cursor.execute('''
-        INSERT INTO users (name, level, join_time, is_expert)
-        VALUES (?, ?, ?, ?)
-        ''', (name, level, datetime.now(), is_expert))
+        INSERT INTO users (user_id, score, name, level, join_time, is_expert)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ''', (user_id, score, name, level, datetime.now(), is_expert))
 
         self.db.commit()
 

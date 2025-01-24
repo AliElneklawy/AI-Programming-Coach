@@ -51,6 +51,7 @@ class TelegramBot:
         
         self.application.add_handler(self.conv_handler)
         self.application.add_handler(CommandHandler("insert_q", self.insert_q))
+        self.application.add_handler(CommandHandler("ask_q", self.ask_q))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_question_index'] = 0
@@ -64,7 +65,7 @@ class TelegramBot:
         if not user:
             msg = f"""
             Hello, {first_name}. I see this is the first time you use the bot. 
-            How about you take an assessment to determine your level?
+            How about you take an assessment to determine your level? Our assessment has {len(initial_asses_qs)} questions.
             """
             keyboard = [
                 [
@@ -100,6 +101,7 @@ class TelegramBot:
 
     async def handle_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         user_id = update.effective_user.id
+        first_name = update.effective_user.first_name
         user_answer = update.message.text
 
         current_index = context.user_data.get('current_question_index', 0)
@@ -139,7 +141,7 @@ class TelegramBot:
             else:
                 level = 'advanced'
 
-            self.db.insert_user(user_id, level)
+            self.db.insert_user(user_id, current_score, first_name, level)
 
             await update.message.reply_text(f"Assessment completed! Your level is: {level}")
             return END_ASSESSMENT
@@ -155,8 +157,18 @@ class TelegramBot:
             await update.message.reply_text("Sorry, this command is only available for admins.")
             return
         
-        # Placeholder for question insertion logic
-        # self.db.insert_q()
+        full_text = update.message.text
+        args_text = full_text[len('/insert_q '):]
+        *question_parts, level = args_text.rsplit(' ', 1)
+        question = ' '.join(question_parts)
+        q_qlevel = [(question, level.lower())]
+
+        self.db.insert_q(q_qlevel)
+        await update.message.reply_text(f"Question added: '{question}' with level: {level}")
+
+
+    async def ask_q(self):
+        pass
 
     def run(self):
         print('======== Bot is running ========')
