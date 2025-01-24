@@ -4,8 +4,12 @@ from constants import initial_asses_qs
 from datetime import datetime
 from dotenv import load_dotenv
 import os
+import asyncio
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.constants import ParseMode
+from telegram.error import RetryAfter
 import logging
+import time
 from telegram.ext import (
     filters,
     CommandHandler,
@@ -13,7 +17,7 @@ from telegram.ext import (
     MessageHandler,
     ContextTypes,
     CallbackQueryHandler,
-    ConversationHandler
+    ConversationHandler,
 )
 
 logging.basicConfig(
@@ -51,7 +55,7 @@ class TelegramBot:
         
         self.application.add_handler(self.conv_handler)
         self.application.add_handler(CommandHandler("insert_q", self.insert_q))
-        self.application.add_handler(CommandHandler("ask_q", self.ask_q))
+        self.application.add_handler(CommandHandler("ask_cohere", self.ask_cohere))
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_question_index'] = 0
@@ -167,8 +171,13 @@ class TelegramBot:
         await update.message.reply_text(f"Question added: '{question}' with level: {level}")
 
 
-    async def ask_q(self):
-        pass
+    async def ask_cohere(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        args = context.args
+        question = ' '.join(args)
+        msg = await update.message.reply_text('Thinking....')
+        answer: str = self.teacher.get_response(question, 1).replace('**', '*')
+        
+        await msg.edit_text(answer)
 
     def run(self):
         print('======== Bot is running ========')
