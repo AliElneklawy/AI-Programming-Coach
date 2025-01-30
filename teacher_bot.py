@@ -14,17 +14,17 @@ class PythonLearningBot:
 
     def get_response(self, message, user_asks=0):
         if user_asks: # if this is a question from the user
-            answer = res = self.co.chat(
-            model="command-r-plus-08-2024",
-            messages=[
-                    {"role": "system", "content": "Your response must be concise and to the point."},
-                    {
-                        "role": "user",
-                        "content": f"{message}",
-                    }
-                ],
-            )
-            return res.message.content[0].text
+            answer = self.co.chat(
+                    model="command-r-plus-08-2024",
+                    messages=[
+                            {"role": "system", "content": "Your response must be concise and to the point."},
+                            {
+                                "role": "user",
+                                "content": f"{message}",
+                            }
+                        ],
+                    )
+            return answer.message.content[0].text
                 
         messages = [
             {"role": "system", "content": cohere_sys_msg},
