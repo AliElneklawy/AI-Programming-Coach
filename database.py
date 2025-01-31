@@ -90,6 +90,8 @@ class DataBaseOps:
         DELETE FROM users WHERE user_id = ?
         ''', (user_id,))
 
+        self.db.commit()
+
     
     def delete_q(self, q_id):
         cursor = self.db.cursor()
