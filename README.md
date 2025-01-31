@@ -3,6 +3,7 @@
 ## AI Programming Coach
 
 **AI-Powered Telegram Bot for Personalized Programming Assessments and Exercises**
+Try it out: @AI_Programming_Coach_bot
 
 ## Overview
 
