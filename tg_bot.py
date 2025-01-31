@@ -1,9 +1,12 @@
 from database import DataBaseOps
 from teacher_bot import PythonLearningBot
 from constants import initial_asses_qs
-from datetime import datetime
+from constants import score_weights
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
+import asyncio
 import os
+import random
 import logging
 from telegram.error import BadRequest
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -24,7 +27,7 @@ logging.basicConfig(
 
 load_dotenv()
 
-START, QUESTION, END_ASSESSMENT = range(3)
+START, QUESTION, END_ASSESSMENT, DAILY_TASK  = range(4)
 
 
 class TelegramBot:
@@ -34,7 +37,8 @@ class TelegramBot:
         self.teacher = PythonLearningBot()
         self.application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
         
-        self.conv_handler = ConversationHandler(
+        # Main conversation handler for assessment
+        self.assessment_handler = ConversationHandler(
             entry_points=[CommandHandler("start", self.start_command)],
             states={
                 START: [
@@ -52,20 +56,38 @@ class TelegramBot:
                 CommandHandler("cancel", self.cancel_assessment),
                 CommandHandler("start", self.start_command)
             ],
+            name="assessment_conversation"
         )
         
-        self.application.add_handler(self.conv_handler)
-        # self.application.add_handler(CommandHandler("insert_q", self.insert_q))
-        # self.application.add_handler(CommandHandler("ask_cohere", self.ask_cohere))
-        # self.application.add_handler(CommandHandler("my_level", self.my_level))
+        self.application.add_handler(self.assessment_handler)
+        
+        # Add general message handler for daily tasks with low priority
+        self.application.add_handler(
+            MessageHandler(
+                filters.TEXT & ~filters.COMMAND,
+                self.handle_daily_answer
+            ),
+            group=1  # Lower priority than conversation handler
+        )
+        
+        # Add other command handlers
         self.application.add_handlers(handlers={
-            1: [CommandHandler("get_questions", self.get_questions),
-                CommandHandler("insert_q", self.insert_q), 
+            2: [  # Even lower priority
+                CommandHandler("get_questions", self.get_questions),
+                CommandHandler("insert_q", self.insert_q),
+                CommandHandler("delete_q", self.delete_q),
                 CommandHandler("ask_cohere", self.ask_cohere),
                 CommandHandler("my_level", self.my_level),
-                CommandHandler("unsubscribe", self.unsubscribe)]
+                CommandHandler("unsubscribe", self.unsubscribe),
+                CommandHandler("skip", self.skip_daily_task)
+            ]
         })
 
+        self.job_queue = self.application.job_queue
+        self.job_queue.run_repeating(
+            callback=self.send_daily_task,
+            interval=timedelta(minutes=1)
+        )
 
     def create_keyboard(self, texts: list, callbacks: list):
         keyboard = [
@@ -78,6 +100,15 @@ class TelegramBot:
         return InlineKeyboardMarkup(keyboard)
 
 
+    def level_by_score(self, score: int):
+        return 'beginner' if score <= 4 else 'intermediate' if score <= 12 else 'advanced'
+
+
+    async def start_daily_task(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handler for when a daily task message is received"""
+        return DAILY_TASK
+
+        
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_question_index'] = 0
         context.user_data['score'] = 0
@@ -169,13 +200,7 @@ class TelegramBot:
             await update.message.reply_text(next_question)
             return QUESTION
         else:
-            if current_score <= 4:
-                level = 'beginner'
-            elif current_score <= 12:
-                level = 'intermediate'
-            else:
-                level = 'advanced'
-
+            level = self.level_by_score(current_score)
             self.db.insert_user(user_id, current_score, first_name, level)
 
             await update.message.reply_text(f"Assessment completed! Your level is: {level}")
@@ -202,6 +227,12 @@ class TelegramBot:
 
         self.db.insert_q(q_qlevel)
         await update.message.reply_text(f"Question added: '{question}' with level: {level}")
+
+    
+    async def delete_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        q_id = context.args[0]
+        self.db.delete_q(q_id)
+        await update.message.reply_text(f" The question with id: {q_id} is deleted.")
 
 
     async def ask_cohere(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -245,8 +276,143 @@ class TelegramBot:
         await update.message.reply_text(text=msg, reply_markup=reply_markup, parse_mode='Markdown')
 
 
-    async def send_daily_task(self):
-        pass
+    async def send_daily_task(self, context: ContextTypes.DEFAULT_TYPE):
+        """Send daily tasks to users"""
+        users = self.db.get_users(daily_task=True)
+        current_time = datetime.now()
+
+        for user_id, level, last_assessment in users:
+            if isinstance(last_assessment, str):
+                last_assessment = datetime.strptime(last_assessment, "%Y-%m-%d %H:%M:%S.%f")
+
+            time_diff = current_time - last_assessment
+
+            if time_diff < timedelta(minutes=2):
+                continue
+
+            # Check if user already has an active question
+            result = self.db.execute_query('''
+                SELECT current_question 
+                FROM users 
+                WHERE user_id = ? AND current_question IS NOT NULL
+            ''', (user_id,))
+            
+            if result:
+                continue  # Skip if user already has an active question
+
+            questions = self.db.get_questions(q_level=level)
+
+            if not questions:
+                logging.warning(f"No questions available for level: {level}")
+                continue
+
+            daily_question = random.choice(questions)[0]
+
+            self.db.execute_query('''
+                UPDATE users 
+                SET current_question = ?,
+                    last_assessment = ?
+                WHERE user_id = ?
+                ''', 
+                (daily_question, current_time, user_id))
+            
+            message = (
+                "🎯 Here's your daily Python challenge!\n\n"
+                f"{daily_question}\n\n"
+                "Reply with your answer or use /skip to skip this question."
+            )
+            
+            try:
+                await context.bot.send_message(
+                    chat_id=user_id,
+                    text=message,
+                    parse_mode='HTML'
+                )
+            except Exception as e:
+                logging.error(f"Failed to send message to user {user_id}: {str(e)}")
+                continue
+            
+            await asyncio.sleep(0.5)
+
+
+    async def handle_daily_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle answers to daily tasks"""
+        user_id = update.effective_user.id
+        user_answer = update.message.text
+
+        # Check if user has an active daily task
+        result = self.db.execute_query('''
+            SELECT current_question, score, level 
+            FROM users 
+            WHERE user_id = ? AND current_question IS NOT NULL
+        ''', (user_id,))
+        
+        if not result:
+            # No active daily task, let other handlers process the message
+            return
+        
+        current_question, current_score, current_level = result[0]
+        
+        message = f"Question: {current_question}. User Answer: {user_answer}"
+        status = self.teacher.get_response(message)
+        score_change = score_weights.get(current_level, 1)
+
+        if status == 1:
+            new_score = current_score + score_change
+            await update.message.reply_text(
+                f"🎉 Correct! You earned {score_change} points.\n"
+                f"Your new score is: {new_score}"
+            )
+        else:
+            new_score = max(0, current_score - score_change)
+            await update.message.reply_text(
+                f"❌ That's not quite right. You lost {score_change} points.\n"
+                f"Your new score is: {new_score}"
+            )
+
+        new_level = self.level_by_score(new_score)
+        is_expert = new_level == 'advanced'
+        self.db.execute_query('''
+            UPDATE users 
+            SET score = ?,
+                current_question = NULL,
+                last_assessment = ?,
+                level = ?,
+                is_expert = ?
+            WHERE user_id = ?
+        ''', (new_score, datetime.now(), new_level, is_expert, user_id))
+
+        self.db.insert_assesment(
+            user_id, 
+            current_question, 
+            user_answer, 
+            status, 
+            datetime.now()
+        )
+
+
+    async def skip_daily_task(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle skipping of daily tasks."""
+        user_id = update.effective_user.id
+        
+        result = self.db.execute_query('''
+            SELECT current_question 
+            FROM users 
+            WHERE user_id = ? AND current_question IS NOT NULL
+        ''', (user_id,))
+        
+        if not result:
+            await update.message.reply_text("You don't have an active daily task to skip!")
+            return
+        
+        self.db.execute_query('''
+            UPDATE users 
+            SET current_question = NULL
+            WHERE user_id = ?
+        ''', (user_id,))
+        
+        await update.message.reply_text("Daily task skipped. Wait for the next one!")
+    
 
     def run(self):
         print('======== Bot is running ========')

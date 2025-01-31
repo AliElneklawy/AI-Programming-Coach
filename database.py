@@ -10,14 +10,15 @@ class DataBaseOps:
     def setup_db(self) -> None:
         cursor = self.db.cursor()
 
-        # add a last assessment time column
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS users (
                        user_id INTEGER PRIMARY KEY,
                        score INTEGER,
                        name TEXT,
                        level TEXT,
+                       current_question TEXT,
                        join_time DATETIME,
+                       last_assessment DATETIME,
                        is_expert BOOLEAN DEFAULT FALSE)        
         ''')
 
@@ -59,14 +60,17 @@ class DataBaseOps:
         
         self.db.commit()
 
-    def insert_user(self, user_id: int, score: int, name='no_name', level='beginner') -> None:
+    def insert_user(self, user_id: int, 
+                    score: int, name='no_name', 
+                    level='beginner', 
+                    last_assessment=datetime.now()) -> None:
         cursor = self.db.cursor()
 
         is_expert = level.lower() == 'advanced'
         cursor.execute('''
-        INSERT INTO users (user_id, score, name, level, join_time, is_expert)
-        VALUES (?, ?, ?, ?, ?, ?)
-        ''', (user_id, score, name, level, datetime.now(), is_expert))
+        INSERT INTO users (user_id, score, name, level, join_time, last_assessment, is_expert)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, score, name, level, datetime.now(), last_assessment, is_expert))
 
         self.db.commit()
 
@@ -79,13 +83,25 @@ class DataBaseOps:
 
         self.db.commit()
 
+
     def delete_user(self, user_id):
         cursor = self.db.cursor()
         cursor.execute('''
         DELETE FROM users WHERE user_id = ?
         ''', (user_id,))
 
-    def get_questions(self, q_level: str=None) -> List[Tuple]:
+    
+    def delete_q(self, q_id):
+        cursor = self.db.cursor()
+        cursor.execute('''
+        DELETE FROM questions
+        WHERE q_id = ?
+        ''', (q_id,))
+
+        self.db.commit()
+
+
+    def get_questions(self, q_level: str = None) -> List[Tuple]:
         cursor = self.db.cursor()
 
         if q_level: # query based on question level
@@ -101,20 +117,49 @@ class DataBaseOps:
         return questions
         
     
-    def get_users(self, id=None):
+    def get_users(self, id=None, daily_task=False):
         cursor = self.db.cursor()
 
         if id: # selection based on id
             cursor.execute('''
-            SELECT user_id, score, level FROM users WHERE user_id == ?
+            SELECT user_id, score, level 
+            FROM users 
+            WHERE user_id == ?
             ''', (id,))
 
             user = cursor.fetchone()
             return user
+        
+        if daily_task:
+            cursor.execute('''
+            SELECT user_id, level, last_assessment
+            FROM users
+            ''')
+
+            users = cursor.fetchall()
+            return users
         
         cursor.execute('''
         SELECT * FROM users
         ''')
         users = cursor.fetchall()
         return users
+    
+
+    def update_user(self, new_score, user_id, assessment_time):
+        cursor = self.db.cursor()
+        cursor.execute('''
+        UPDATE users
+        SET score = ?,
+            current_question = NULL,
+            last_assessment = ?
+        WHERE user_id = ?
+        ''', (new_score, user_id, assessment_time))
+
+
+    def execute_query(self, query: str, params: tuple):
+        cursor = self.db.cursor()
+        cursor.execute(query, params)
+        
+        return cursor.fetchall()
         

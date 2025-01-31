@@ -56,3 +56,8 @@ advanced_questions = [
                 ("What are slots (`__slots__`) in Python, and how do they improve memory efficiency?", "advanced")
             ]
 
+score_weights = {
+    'beginner': 1,
+    'intermediate': 2,
+    'advanced': 3
+}
