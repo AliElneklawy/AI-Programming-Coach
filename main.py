@@ -1,31 +1,22 @@
-import os
-from dotenv import load_dotenv
-
+from tg_bot import TelegramBot
 from teacher_bot import PythonLearningBot
 from database import DataBaseOps
 from constants import (
                     beginner_questions, 
                     intermediate_questions, 
                     advanced_questions, 
-                    initial_asses_qs,
                     )
 
 
-load_dotenv()
-
 if __name__ == '__main__':
-    user_id = 1
 
+    bot = TelegramBot()
     db = DataBaseOps()
-    bot = PythonLearningBot()
 
     # db.insert_q(beginner_questions)
     # db.insert_q(intermediate_questions)
     # db.insert_q(advanced_questions)
 
-    # user_level = bot.initial_assesment(initial_asses_qs, user_id)
-    # db.insert_user(level=user_level)
-    q = db.get_questions('advanced')
-    for qe in q:
-        print(qe[0])
+    bot.run()
+
 

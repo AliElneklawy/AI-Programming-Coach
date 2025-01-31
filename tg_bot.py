@@ -8,8 +8,8 @@ import asyncio
 import os
 import random
 import logging
-from telegram.error import BadRequest
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from telegram.ext import (
     filters,
     CommandHandler,
@@ -79,7 +79,8 @@ class TelegramBot:
                 CommandHandler("ask_cohere", self.ask_cohere),
                 CommandHandler("my_level", self.my_level),
                 CommandHandler("unsubscribe", self.unsubscribe),
-                CommandHandler("skip", self.skip_daily_task)
+                CommandHandler("skip", self.skip_daily_task),
+                CommandHandler("top_learners", self.top_learners)
             ]
         })
 
@@ -112,7 +113,6 @@ class TelegramBot:
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_question_index'] = 0
         context.user_data['score'] = 0
-        # context.user_data['level'] = 'beginner'
         
         first_name = update.effective_user.first_name
         user_id = update.effective_user.id
@@ -136,9 +136,7 @@ class TelegramBot:
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         query = update.callback_query
         await query.answer()
-        
-        #logging.info(f"Button handler called with data: {query.data}")
-        
+                
         if query.data == 'stay':
             logging.info("Stay button pressed")
             await query.edit_message_text(text="We are glad to have you!")
@@ -244,7 +242,7 @@ class TelegramBot:
         args = context.args
         question = ' '.join(args)
         msg = await update.message.reply_text('Thinking....')
-        answer: str = self.teacher.get_response(question, 1)
+        answer: str = self.teacher.get_response(question, user_asks=1)
         
         await msg.edit_text(answer)
 
@@ -279,6 +277,23 @@ class TelegramBot:
         reply_markup = self.create_keyboard(texts=["Yes, I'm sure", "No, I will stay"],
                                             callbacks=["unsubscribe", "stay"])
         await update.message.reply_text(text=msg, reply_markup=reply_markup, parse_mode='Markdown')
+
+
+    async def top_learners(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Display top learners in a formatted table"""
+        top_learners = self.db.get_top_learners()
+        
+        table_lines = ["🏆 Top Learners 🏆"]
+        table_lines.append("```")
+        table_lines.append(f"{'Name':<10} {'Level':<12} {'Score':<5}")
+        table_lines.append("-" * 30)
+        
+        for name, level, score in top_learners:
+            table_lines.append(f"{name:<10} {level:<12} {score:<5}")
+        
+        table_lines.append("```")
+        
+        await update.message.reply_text("\n".join(table_lines), parse_mode='Markdown')
 
 
     async def send_daily_task(self, context: ContextTypes.DEFAULT_TYPE):
@@ -420,8 +435,5 @@ class TelegramBot:
     
 
     def run(self):
-        print('======== Bot is running ========')
+        logging.info("======== Bot is running ========")
         self.application.run_polling()
-
-bot = TelegramBot()
-bot.run()

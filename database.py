@@ -150,6 +150,7 @@ class DataBaseOps:
 
     def update_user(self, new_score, user_id, assessment_time):
         cursor = self.db.cursor()
+
         cursor.execute('''
         UPDATE users
         SET score = ?,
@@ -159,9 +160,30 @@ class DataBaseOps:
         ''', (new_score, user_id, assessment_time))
 
 
-    def execute_query(self, query: str, params: tuple):
+    def execute_query(self, query: str, params: tuple = None):
         cursor = self.db.cursor()
-        cursor.execute(query, params)
-        
+
+        if params:
+            cursor.execute(query, params)
+        else:
+            cursor.execute(query)
+            
         return cursor.fetchall()
-        
+
+
+    def get_top_learners(self, limit=10):
+        """
+        Retrieve top learners sorted by score in descending order
+        :param limit: Maximum number of learners to return (default 10)
+        :return: List of tuples (name, level, score)
+        """
+        cursor = self.db.cursor()
+
+        cursor.execute('''
+        SELECT name, level, score 
+        FROM users 
+        ORDER BY score DESC 
+        LIMIT ?
+        ''', (limit,))
+
+        return cursor.fetchall()
