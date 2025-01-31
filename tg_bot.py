@@ -230,9 +230,14 @@ class TelegramBot:
 
     
     async def delete_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        if user_id not in self.admins:
+            await update.message.reply_text("Sorry, this command is only available for admins.")
+            return
+
         q_id = context.args[0]
         self.db.delete_q(q_id)
-        await update.message.reply_text(f" The question with id: {q_id} is deleted.")
+        await update.message.reply_text(f" The question with id {q_id} is deleted.")
 
 
     async def ask_cohere(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
