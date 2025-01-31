@@ -48,7 +48,7 @@ AI Programming Coach is a Telegram bot designed to enhance users' programming sk
 
 1. **Clone the Repository**  
    ```bash
-   git clone https://github.com/yourusername/AI-Programming-Coach.git
+   git clone https://github.com/AliElneklawy/AI-Programming-Coach.git
    cd AI-Programming-Coach
    ```
 
