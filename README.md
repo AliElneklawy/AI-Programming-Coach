@@ -42,7 +42,7 @@ AI Programming Coach is a Telegram bot designed to enhance users' programming sk
 - Python 3.11
 - Telegram Bot API Token
 - SQLite for storing user data
-- Cohere API key (optional, for AI-generated answers)
+- Cohere API key (for AI-generated answers)
 
 ### Steps to Run Locally
 
