@@ -4,6 +4,8 @@
 
 **AI-Powered Telegram Bot for Personalized Programming Assessments and Exercises**
 
+Try it out: @AI_Programming_Coach_bot
+
 ## Overview
 
 AI Programming Coach is a Telegram bot designed to enhance users' programming skills through personalized assessments and daily exercises. It evaluates users' proficiency levels and provides tailored programming questions, enabling consistent practice and improvement.
