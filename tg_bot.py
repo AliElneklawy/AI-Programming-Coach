@@ -8,6 +8,7 @@ import asyncio
 import os
 import random
 import logging
+from enum import Enum, auto
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.error import BadRequest
 from telegram.ext import (
@@ -20,6 +21,7 @@ from telegram.ext import (
     ConversationHandler,
 )
 
+
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     level=logging.INFO
@@ -27,7 +29,13 @@ logging.basicConfig(
 
 load_dotenv()
 
-START, QUESTION, END_ASSESSMENT, DAILY_TASK  = range(4)
+# START, QUESTION, END_ASSESSMENT, DAILY_TASK  = range(4)
+
+class ConvState(Enum):
+    START = auto()
+    QUESTION = auto()
+    END_ASSESSMENT = auto()
+    DAILY_TASK = auto()
 
 
 class TelegramBot:
@@ -41,13 +49,13 @@ class TelegramBot:
         self.assessment_handler = ConversationHandler(
             entry_points=[CommandHandler("start", self.start_command)],
             states={
-                START: [
+                ConvState.START.value: [
                     CallbackQueryHandler(self.button_handler)
                 ],
-                QUESTION: [
+                ConvState.QUESTION.value: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_answer)
                 ],
-                END_ASSESSMENT: [
+                ConvState.END_ASSESSMENT.value: [
                     CommandHandler("start", self.start_command),
                     CallbackQueryHandler(self.button_handler)
                 ]
@@ -80,7 +88,8 @@ class TelegramBot:
                 CommandHandler("my_level", self.my_level),
                 CommandHandler("unsubscribe", self.unsubscribe),
                 CommandHandler("skip", self.skip_daily_task),
-                CommandHandler("top_learners", self.top_learners)
+                CommandHandler("top_learners", self.top_learners),
+                CommandHandler("task_interval", self.task_interval)
             ]
         })
 
@@ -104,11 +113,6 @@ class TelegramBot:
     def level_by_score(self, score: int):
         return 'beginner' if score <= 4 else 'intermediate' if score <= 12 else 'advanced'
 
-
-    async def start_daily_task(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-        """Handler for when a daily task message is received"""
-        return DAILY_TASK
-
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['current_question_index'] = 0
@@ -126,11 +130,11 @@ class TelegramBot:
             reply_markup = self.create_keyboard(texts=["Yes, let's start!", "No, maybe later"],
                                                 callbacks=["start_assessment", "decline_assessment"])
             await update.message.reply_text(text=msg, reply_markup=reply_markup)
-            return START
+            return ConvState.START.value
     
         msg = f"Welcome back, {first_name}."
         await update.message.reply_text(text=msg)
-        return END_ASSESSMENT
+        return ConvState.END_ASSESSMENT.value
 
 
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -140,7 +144,7 @@ class TelegramBot:
         if query.data == 'stay':
             logging.info("Stay button pressed")
             await query.edit_message_text(text="We are glad to have you!")
-            return END_ASSESSMENT
+            return ConvState.END_ASSESSMENT.value
         
         elif query.data == 'unsubscribe':
             user_id = update.effective_user.id
@@ -154,13 +158,13 @@ class TelegramBot:
             await query.message.reply_text(first_question)
             context.user_data['current_question_index'] = 0
             context.user_data['score'] = 0
-            return QUESTION
+            return ConvState.QUESTION.value
         
         elif query.data == 'decline_assessment':
             await query.edit_message_text(text="Ok, you can start the assessment anytime.")
-            return END_ASSESSMENT
+            return ConvState.END_ASSESSMENT.value
         
-        return END_ASSESSMENT
+        return ConvState.END_ASSESSMENT.value
 
 
     async def handle_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -173,7 +177,7 @@ class TelegramBot:
 
         if current_index >= len(initial_asses_qs):
             await update.message.reply_text("Assessment completed!")
-            return END_ASSESSMENT
+            return ConvState.END_ASSESSMENT.value
 
         question, weight = initial_asses_qs[current_index]
         
@@ -196,19 +200,19 @@ class TelegramBot:
         if current_index < len(initial_asses_qs):
             next_question, _ = initial_asses_qs[current_index]
             await update.message.reply_text(next_question)
-            return QUESTION
+            return ConvState.QUESTION.value
         else:
             level = self.level_by_score(current_score)
             self.db.insert_user(user_id, current_score, first_name, level)
 
             await update.message.reply_text(f"Assessment completed! Your level is: {level}")
-            return END_ASSESSMENT
+            return ConvState.END_ASSESSMENT.value
 
 
     async def cancel_assessment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Cancel the assessment."""
         await update.message.reply_text("Assessment cancelled.")
-        return END_ASSESSMENT
+        return ConvState.END_ASSESSMENT.value
         
 
     async def insert_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -296,18 +300,27 @@ class TelegramBot:
         await update.message.reply_text("\n".join(table_lines), parse_mode='Markdown')
 
 
+    async def task_interval(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        user_id = update.effective_user.id
+        interval = context.args[0]
+
+        self.db.update_interval(user_id, interval)
+
+        await update.message.reply_text(f"You will get a task every {interval} hours.")
+
+
     async def send_daily_task(self, context: ContextTypes.DEFAULT_TYPE):
         """Send daily tasks to users"""
         users = self.db.get_users(daily_task=True)
         current_time = datetime.now()
 
-        for user_id, level, last_assessment in users:
+        for user_id, level, last_assessment, task_interval in users:
             if isinstance(last_assessment, str):
                 last_assessment = datetime.strptime(last_assessment, "%Y-%m-%d %H:%M:%S.%f")
 
             time_diff = current_time - last_assessment
 
-            if time_diff < timedelta(minutes=2):
+            if time_diff < timedelta(hours=task_interval):
                 continue
 
             # Check if user already has an active question

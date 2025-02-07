@@ -19,6 +19,7 @@ class DataBaseOps:
                        current_question TEXT,
                        join_time DATETIME,
                        last_assessment DATETIME,
+                       task_interval INT,
                        is_expert BOOLEAN DEFAULT FALSE)        
         ''')
 
@@ -50,6 +51,7 @@ class DataBaseOps:
 
         self.db.commit()
 
+
     def insert_q(self, questions: List[Tuple[str, str]]) -> None:
         cursor = self.db.cursor()
 
@@ -60,19 +62,22 @@ class DataBaseOps:
         
         self.db.commit()
 
+
     def insert_user(self, user_id: int, 
                     score: int, name='no_name', 
-                    level='beginner', 
+                    level='beginner',
+                    task_interval=24, 
                     last_assessment=datetime.now()) -> None:
         cursor = self.db.cursor()
 
         is_expert = level.lower() == 'advanced'
         cursor.execute('''
-        INSERT INTO users (user_id, score, name, level, join_time, last_assessment, is_expert)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (user_id, score, name, level, datetime.now(), last_assessment, is_expert))
+        INSERT INTO users (user_id, score, name, level, join_time, last_assessment, task_interval, is_expert)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user_id, score, name, level, datetime.now(), last_assessment, task_interval, is_expert))
 
         self.db.commit()
+
 
     def insert_assesment(self, user_id: int, q: str, ans: str, is_correct, time) -> None:
         cursor = self.db.cursor()
@@ -134,7 +139,7 @@ class DataBaseOps:
         
         if daily_task:
             cursor.execute('''
-            SELECT user_id, level, last_assessment
+            SELECT user_id, level, last_assessment, task_interval
             FROM users
             ''')
 
@@ -187,3 +192,15 @@ class DataBaseOps:
         ''', (limit,))
 
         return cursor.fetchall()
+    
+
+    def update_interval(self, user_id: int, interval: int):
+        cursor = self.db.cursor()
+
+        cursor.execute('''
+        UPDATE users 
+        SET task_interval = ?
+        WHERE user_id = ?
+        ''', (interval, user_id))
+
+        self.db.commit()

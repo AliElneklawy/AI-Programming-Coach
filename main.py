@@ -1,5 +1,4 @@
 from tg_bot import TelegramBot
-from teacher_bot import PythonLearningBot
 from database import DataBaseOps
 from constants import (
                     beginner_questions, 
@@ -18,5 +17,3 @@ if __name__ == '__main__':
     # db.insert_q(advanced_questions)
 
     bot.run()
-
-
