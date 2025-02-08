@@ -26,7 +26,7 @@ class DataBaseOps:
         cursor.execute('''
         CREATE TABLE IF NOT EXISTS questions (
                        q_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                       question TEXT,
+                       question TEXT UNIQUE,
                        q_level TEXT)
         ''')
 
@@ -55,12 +55,31 @@ class DataBaseOps:
     def insert_q(self, questions: List[Tuple[str, str]]) -> None:
         cursor = self.db.cursor()
 
-        for q, level in questions:
-            cursor.execute('''
-            INSERT INTO questions (question, q_level) VALUES (?, ?)
-            ''', (q, level))
+        # for q, level in questions:
+        #     try:
+        #         cursor.execute('''
+        #         INSERT INTO questions (question, q_level) VALUES (?, ?)
+        #         ''', (q, level))
+        #     except sqlite3.IntegrityError:
+        #         print(f"Skipping existing questions: {q}")
+
+        with self.db:
+            for q, level in questions:
+                cursor.execute('''
+                INSERT OR IGNORE INTO questions (question, q_level) 
+                VALUES (?, ?)
+                ''', (q, level))
+
+        # for q, level in questions:
+        #     cursor.execute('''
+        #     INSERT INTO questions (question, q_level) 
+        #     VALUES (?, ?)
+        #     ON CONFLICT(question) DO UPDATE
+        #     SET q_level = excluded.q_level
+        #     RETURNING question;
+        #     ''', (q, level))
         
-        self.db.commit()
+        # self.db.commit()
 
 
     def insert_user(self, user_id: int, 

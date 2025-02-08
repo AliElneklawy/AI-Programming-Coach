@@ -100,6 +100,15 @@ class TelegramBot:
         )
 
     def create_keyboard(self, texts: list, callbacks: list):
+        """Creates an inline keyboard with two buttons.
+
+        Args:
+            texts (list): A list containing two button labels.
+            callbacks (list): A list containing two callback data values corresponding to the buttons.
+
+        Returns:
+            InlineKeyboardMarkup: An inline keyboard with two buttons.
+        """
         keyboard = [
             [
                 InlineKeyboardButton(texts[0], callback_data=callbacks[0]),
@@ -111,10 +120,27 @@ class TelegramBot:
 
 
     def level_by_score(self, score: int):
+        """Determines the user's skill level based on their score.
+
+        Args:
+            score (int): The user's score.
+
+        Returns:
+            str: The skill level ('beginner', 'intermediate', or 'advanced').
+        """
         return 'beginner' if score <= 4 else 'intermediate' if score <= 12 else 'advanced'
 
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handles the /start command to initialize the bot for a user.
+
+        Args:
+            update (Update): The Telegram update object.
+            context (ContextTypes.DEFAULT_TYPE): The context object storing user data.
+
+        Returns:
+            int: The next conversation state.
+        """
         context.user_data['current_question_index'] = 0
         context.user_data['score'] = 0
         
@@ -123,9 +149,7 @@ class TelegramBot:
         
         user: tuple = self.db.get_users(user_id) # returns none if not exists
         if not user: # user not in the db
-            msg = f"""
-            Hello, {first_name}. I see this is the first time you use the bot. 
-            How about you take an assessment to determine your level? Our assessment has {len(initial_asses_qs)} questions.
+            msg = f"""Hello, {first_name}. I see this is the first time you use the bot.\n\nHow about you take an assessment to determine your level? Our assessment has {len(initial_asses_qs)} questions.
             """
             reply_markup = self.create_keyboard(texts=["Yes, let's start!", "No, maybe later"],
                                                 callbacks=["start_assessment", "decline_assessment"])
@@ -138,6 +162,7 @@ class TelegramBot:
 
 
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Handles inline button presses and updates the chat accordingly."""
         query = update.callback_query
         await query.answer()
                 
@@ -168,6 +193,7 @@ class TelegramBot:
 
 
     async def handle_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+        """Processes user answers during the assessment."""
         user_id = update.effective_user.id
         first_name = update.effective_user.first_name
         user_answer = update.message.text
@@ -210,12 +236,13 @@ class TelegramBot:
 
 
     async def cancel_assessment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Cancel the assessment."""
+        """Cancels an ongoing assessment session."""
         await update.message.reply_text("Assessment cancelled.")
         return ConvState.END_ASSESSMENT.value
         
 
     async def insert_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Inserts a new assessment question (admin only)."""
         user_id = update.effective_user.id
         if user_id not in self.admins:
             await update.message.reply_text("Sorry, this command is only available for admins.")
@@ -232,6 +259,7 @@ class TelegramBot:
 
     
     async def delete_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Deletes an assessment question by ID (admin only)."""
         user_id = update.effective_user.id
         if user_id not in self.admins:
             await update.message.reply_text("Sorry, this command is only available for admins.")
@@ -243,6 +271,7 @@ class TelegramBot:
 
 
     async def ask_cohere(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handles user queries and generates AI-based responses."""
         args = context.args
         question = ' '.join(args)
         msg = await update.message.reply_text('Thinking....')
@@ -252,6 +281,7 @@ class TelegramBot:
 
 
     async def my_level(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Retrieves and displays the user's current learning level."""
         user_id = update.effective_user.id
         score_level = self.db.get_users(id=user_id) # returns (user_id, score, level)
         if score_level is None:
@@ -263,6 +293,7 @@ class TelegramBot:
 
 
     async def get_questions(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Retrieves and displays all available assessment questions (admin only)."""
         user_id = update.effective_user.id
         if user_id in self.admins:
             questions = self.db.get_questions()        
@@ -277,6 +308,7 @@ class TelegramBot:
 
 
     async def unsubscribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Initiates the process for a user to unsubscribe from the bot."""
         msg = "Are you sure you want to unsubscribe from the bot? ***All your records will be deleted***."
         reply_markup = self.create_keyboard(texts=["Yes, I'm sure", "No, I will stay"],
                                             callbacks=["unsubscribe", "stay"])
@@ -284,7 +316,7 @@ class TelegramBot:
 
 
     async def top_learners(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Display top learners in a formatted table"""
+        """Displays the top learners in a formatted table."""
         top_learners = self.db.get_top_learners()
         
         table_lines = ["🏆 Top Learners 🏆"]
@@ -301,6 +333,7 @@ class TelegramBot:
 
 
     async def task_interval(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Updates the frequency of task notifications."""
         user_id = update.effective_user.id
         interval = context.args[0]
 

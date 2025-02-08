@@ -8,12 +8,11 @@ from constants import (
 
 
 if __name__ == '__main__':
-
     bot = TelegramBot()
     db = DataBaseOps()
 
-    # db.insert_q(beginner_questions)
-    # db.insert_q(intermediate_questions)
-    # db.insert_q(advanced_questions)
+    db.insert_q(beginner_questions)
+    db.insert_q(intermediate_questions)
+    db.insert_q(advanced_questions)
 
     bot.run()
