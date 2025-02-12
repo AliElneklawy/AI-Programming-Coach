@@ -77,6 +77,7 @@ AI Programming Coach is a Telegram bot designed to enhance users' programming sk
 | Command           | Description |
 |------------------|-------------|
 | `/start` | Starts the bot and prompts a programming assessment if first-time use. |
+| `/task_interval <duration>` | Update the frequency of receiving tasks. |
 | `/my_level` | Displays the user’s current level and score. |
 | `/skip` | Skips the daily challenge. |
 | `/unsubscribe` | Deletes the user’s data and unsubscribes from the bot. |
