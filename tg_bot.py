@@ -45,17 +45,23 @@ class TelegramBot:
         self.teacher = PythonLearningBot()
         self.application = Application.builder().token(os.getenv('BOT_TOKEN')).build()
         
+        self._setup_handlers()
+        self._setup_jobs()
+
+
+    def _setup_handlers(self):
+        """Configure conversation and command handlers."""
         # Main conversation handler for assessment
         self.assessment_handler = ConversationHandler(
             entry_points=[CommandHandler("start", self.start_command)],
             states={
-                ConvState.START.value: [
+                ConvState.START: [
                     CallbackQueryHandler(self.button_handler)
                 ],
-                ConvState.QUESTION.value: [
+                ConvState.QUESTION: [
                     MessageHandler(filters.TEXT & ~filters.COMMAND, self.handle_answer)
                 ],
-                ConvState.END_ASSESSMENT.value: [
+                ConvState.END_ASSESSMENT: [
                     CommandHandler("start", self.start_command),
                     CallbackQueryHandler(self.button_handler)
                 ]
@@ -78,7 +84,6 @@ class TelegramBot:
             group=1  # Lower priority than conversation handler
         )
         
-        # Add other command handlers
         self.application.add_handlers(handlers={
             2: [  # Even lower priority
                 CommandHandler("get_questions", self.get_questions),
@@ -93,13 +98,17 @@ class TelegramBot:
             ]
         })
 
+
+    def _setup_jobs(self):
         self.job_queue = self.application.job_queue
         self.job_queue.run_repeating(
             callback=self.send_daily_task,
             interval=timedelta(minutes=1)
         )
+    
 
-    def create_keyboard(self, texts: list, callbacks: list):
+    @staticmethod
+    def create_keyboard(texts: list, callbacks: list):
         """Creates an inline keyboard with two buttons.
 
         Args:
@@ -119,7 +128,8 @@ class TelegramBot:
         return InlineKeyboardMarkup(keyboard)
 
 
-    def level_by_score(self, score: int):
+    @staticmethod
+    def level_by_score(score: int):
         """Determines the user's skill level based on their score.
 
         Args:
@@ -132,7 +142,7 @@ class TelegramBot:
 
         
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Handles the /start command to initialize the bot for a user.
+        """Initialize new users with assessment option or welcome back existing users.
 
         Args:
             update (Update): The Telegram update object.
@@ -141,55 +151,103 @@ class TelegramBot:
         Returns:
             int: The next conversation state.
         """
-        context.user_data['current_question_index'] = 0
-        context.user_data['score'] = 0
+        # context.user_data['current_question_index'] = 0
+        # context.user_data['score'] = 0
+
+        context.user_data.update({
+            'current_question_index': 0,
+            'score': 0
+        })
         
         first_name = update.effective_user.first_name
         user_id = update.effective_user.id
         
-        user: tuple = self.db.get_users(user_id) # returns none if not exists
-        if not user: # user not in the db
-            msg = f"""Hello, {first_name}. I see this is the first time you use the bot.\n\nHow about you take an assessment to determine your level? Our assessment has {len(initial_asses_qs)} questions.
-            """
+        existing_user: tuple = self.db.get_users(user_id) # returns none if not exists
+        if not existing_user: # user not in the db
+            return await self._handle_new_user(update, first_name)
+    
+        await update.message.reply_text(text=f"Welcome back, {first_name}.")
+        return ConvState.END_ASSESSMENT
+
+
+    async def _handle_new_user(self, update: Update, first_name: str) -> int:
+            msg = (
+                f"Hello, {first_name}. I see this is the first time you use the bot.\n"
+                f"How about you take an assessment to determine your level? "
+                f"Our assessment has {len(initial_asses_qs)} questions."
+            )
             reply_markup = self.create_keyboard(texts=["Yes, let's start!", "No, maybe later"],
                                                 callbacks=["start_assessment", "decline_assessment"])
             await update.message.reply_text(text=msg, reply_markup=reply_markup)
-            return ConvState.START.value
-    
-        msg = f"Welcome back, {first_name}."
-        await update.message.reply_text(text=msg)
-        return ConvState.END_ASSESSMENT.value
+            return ConvState.START
+
+
+    async def _handle_stay(self, query, _):
+        """Handle 'stay' button press."""
+        await query.edit_message_text(text="We are glad to have you!")
+        return ConvState.END_ASSESSMENT
+
+
+    async def _handle_unsubscribe(self, query, _):
+        self.db.delete_user(query.from_user.id)
+        await query.edit_message_text(text="You have been unsubscribed.")
+        return ConversationHandler.END
+
+
+    async def _handle_start_assessment(self, query, context):
+        await query.edit_message_text(text="Great! Let's begin the assessment.")
+        first_question, _ = initial_asses_qs[0]
+        await query.message.reply_text(first_question)
+        context.user_data['current_question_index'] = 0
+        context.user_data['score'] = 0
+        return ConvState.QUESTION
+
+
+    async def _handle_decline_assessment(self, query, _):
+        await query.edit_message_text(text="Ok, you can start the assessment anytime.")
+        return ConvState.END_ASSESSMENT
 
 
     async def button_handler(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
         """Handles inline button presses and updates the chat accordingly."""
         query = update.callback_query
         await query.answer()
-                
-        if query.data == 'stay':
-            logging.info("Stay button pressed")
-            await query.edit_message_text(text="We are glad to have you!")
-            return ConvState.END_ASSESSMENT.value
-        
-        elif query.data == 'unsubscribe':
-            user_id = update.effective_user.id
-            self.db.delete_user(user_id)
-            await query.edit_message_text(text="You have been unsubscribed.")
-            return ConversationHandler.END
 
-        elif query.data == 'start_assessment':
-            await query.edit_message_text(text="Great! Let's begin the assessment.")
-            first_question, _ = initial_asses_qs[0]
-            await query.message.reply_text(first_question)
-            context.user_data['current_question_index'] = 0
-            context.user_data['score'] = 0
-            return ConvState.QUESTION.value
+        handlers = {
+            "stay": self._handle_stay,
+            "unsubscribe": self._handle_unsubscribe,
+            "start_assessment": self._handle_start_assessment,
+            "decline_assessment": self._handle_decline_assessment,
+        }
+
+        handler = handlers.get(query.data, lambda *args: ConvState.END_ASSESSMENT)
+        return await handler(query, context)
+
+
+        # if query.data == 'stay':
+        #     logging.info("Stay button pressed")
+        #     await query.edit_message_text(text="We are glad to have you!")
+        #     return ConvState.END_ASSESSMENT.value
         
-        elif query.data == 'decline_assessment':
-            await query.edit_message_text(text="Ok, you can start the assessment anytime.")
-            return ConvState.END_ASSESSMENT.value
+        # elif query.data == 'unsubscribe':
+        #     user_id = update.effective_user.id
+        #     self.db.delete_user(user_id)
+        #     await query.edit_message_text(text="You have been unsubscribed.")
+        #     return ConversationHandler.END
+
+        # elif query.data == 'start_assessment':
+        #     await query.edit_message_text(text="Great! Let's begin the assessment.")
+        #     first_question, _ = initial_asses_qs[0]
+        #     await query.message.reply_text(first_question)
+        #     context.user_data['current_question_index'] = 0
+        #     context.user_data['score'] = 0
+        #     return ConvState.QUESTION.value
         
-        return ConvState.END_ASSESSMENT.value
+        # elif query.data == 'decline_assessment':
+        #     await query.edit_message_text(text="Ok, you can start the assessment anytime.")
+        #     return ConvState.END_ASSESSMENT.value
+        
+        # return ConvState.END_ASSESSMENT.value
 
 
     async def handle_answer(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -203,7 +261,7 @@ class TelegramBot:
 
         if current_index >= len(initial_asses_qs):
             await update.message.reply_text("Assessment completed!")
-            return ConvState.END_ASSESSMENT.value
+            return ConvState.END_ASSESSMENT
 
         question, weight = initial_asses_qs[current_index]
         
@@ -226,19 +284,19 @@ class TelegramBot:
         if current_index < len(initial_asses_qs):
             next_question, _ = initial_asses_qs[current_index]
             await update.message.reply_text(next_question)
-            return ConvState.QUESTION.value
+            return ConvState.QUESTION
         else:
             level = self.level_by_score(current_score)
             self.db.insert_user(user_id, current_score, first_name, level)
 
             await update.message.reply_text(f"Assessment completed! Your level is: {level}")
-            return ConvState.END_ASSESSMENT.value
+            return ConvState.END_ASSESSMENT
 
 
     async def cancel_assessment(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Cancels an ongoing assessment session."""
         await update.message.reply_text("Assessment cancelled.")
-        return ConvState.END_ASSESSMENT.value
+        return ConvState.END_ASSESSMENT
         
 
     async def insert_q(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
