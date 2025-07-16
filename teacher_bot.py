@@ -6,7 +6,6 @@ from constants import cohere_sys_msg
 from database import DataBaseOps
 
 load_dotenv()
-
 class PythonLearningBot:
     def __init__(self):
         self.co = cohere.ClientV2(os.getenv('COHERE_API'))
