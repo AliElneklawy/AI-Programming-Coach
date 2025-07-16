@@ -73,16 +73,10 @@ AI Programming Coach is a Telegram bot designed to enhance users' programming sk
 
 ### Running with Docker (Optional)
 
-1. **Build the Docker Image**
-   From the root of the project, run:
-   ```bash
-   docker build -t ai-programming-coach:latest .
-   ```
-
-2. **Run the Docker Container**
+ **Run the Docker Container**
    Make sure your `.env` file is in the same directory. Then run:
    ```bash
-   docker run -it --env-file .env ai-programming-coach:latest
+   docker container run -it --env-file .env alielneklawy/ai_teacher:v1.0
    ```
    This command will run the bot inside the container using the environment variables provided.
 
